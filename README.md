@@ -1,1 +1,1 @@
-# Libra-UNIBUC
+docker compose -p libra -f .\docker\postgres.yml up -d
