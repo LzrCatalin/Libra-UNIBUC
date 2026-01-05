@@ -41,4 +41,10 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             "LEFT JOIN FETCH ba.author " +
             "WHERE b.availableCopies > 0")
     List<Book> findAvailableBooks();
+
+    @Query("SELECT DISTINCT b FROM Book b " +
+            "LEFT JOIN FETCH b.bookAuthors ba " +
+            "LEFT JOIN FETCH ba.author a " +
+            "WHERE a.id = :authorId")
+    List<Book> findByAuthorId(@Param("authorId") Long authorId);
 }
