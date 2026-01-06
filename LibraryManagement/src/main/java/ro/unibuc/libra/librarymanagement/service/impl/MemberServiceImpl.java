@@ -54,7 +54,9 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public MemberDTO findById(Long id) {
         return memberMapper.toDTO(
-                memberRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + id))
+                memberRepository.findById(id).orElseThrow(
+                        () -> new EntityNotFoundException("Member not found with id: " + id)
+                )
         );
     }
 
