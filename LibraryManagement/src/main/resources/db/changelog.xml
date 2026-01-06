@@ -7,4 +7,5 @@
     <!-- Include your SQL file -->
 
     <include file="sql/202604012136_create-tables.sql" relativeToChangelogFile="true"/>
+    <include file="sql/202606012130_insert-data.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -7,4 +7,6 @@ public interface ApiConstants {
     String AUTHORS = API + "/authors";
     String MEMBERS = API + "/members";
     String LOANS = API + "/loans";
+    String RESERVATIONS = API + "/reservations";
+    String FINES = API + "/fines";
 }

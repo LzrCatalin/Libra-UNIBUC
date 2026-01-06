@@ -47,4 +47,11 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
             "WHERE l.member.id = :memberId AND l.status = :status")
     Long countByMemberIdAndStatus(@Param("memberId") Long memberId,
                                    @Param("status") LoanStatus status);
+
+    @Query("SELECT l FROM Loan l " +
+            "LEFT JOIN FETCH l.member " +
+            "LEFT JOIN FETCH l.book " +
+            "WHERE l.dueDate < :date AND l.status = :status")
+    List<Loan> findOverdueLoans(@Param("date") ZonedDateTime date,
+                                 @Param("status") LoanStatus status);
 }
