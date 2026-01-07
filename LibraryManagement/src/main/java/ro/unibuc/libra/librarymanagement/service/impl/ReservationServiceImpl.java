@@ -1,7 +1,8 @@
 package ro.unibuc.libra.librarymanagement.service.impl;
 
-import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import ro.unibuc.libra.librarymanagement.dto.ReservationDTO;
 import ro.unibuc.libra.librarymanagement.entity.Book;
 import ro.unibuc.libra.librarymanagement.entity.Member;
@@ -36,14 +37,27 @@ public class ReservationServiceImpl implements ReservationService {
 
     @Override
     public ReservationDTO createReservation(ReservationDTO reservationDTO) {
+        if (reservationDTO.getBook() == null || reservationDTO.getBook().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Book id is required");
+        }
+        if (reservationDTO.getMember() == null || reservationDTO.getMember().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Member id is required");
+        }
+
         Book book = bookRepository.findById(reservationDTO.getBook().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + reservationDTO.getBook().getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Book not found with id: " + reservationDTO.getBook().getId()
+                ));
 
         Member member = memberRepository.findById(reservationDTO.getMember().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + reservationDTO.getMember().getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Member not found with id: " + reservationDTO.getMember().getId()
+                ));
 
         if (book.getAvailableCopies() > 0) {
-            throw new IllegalStateException("Book is available. No need to reserve.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Book is available. No need to reserve.");
         }
 
         Reservation reservation = new Reservation();
@@ -69,14 +83,20 @@ public class ReservationServiceImpl implements ReservationService {
     public ReservationDTO findReservationById(Long id) {
         return reservationMapper.toDTO(
                 reservationRepository.findByIdWithDetails(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + id))
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Reservation not found with id: " + id
+                        ))
         );
     }
 
     @Override
     public ReservationDTO updateReservation(Long id, ReservationDTO reservationDTO) {
         Reservation existingReservation = reservationRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Reservation not found with id: " + id
+                ));
 
         existingReservation.setReservationDate(reservationDTO.getReservationDate());
         existingReservation.setExpiryDate(reservationDTO.getExpiryDate());
@@ -88,27 +108,27 @@ public class ReservationServiceImpl implements ReservationService {
 
     @Override
     public ReservationDTO deleteReservation(Long id) {
-        if (!reservationRepository.existsById(id)) {
-            throw new EntityNotFoundException("Reservation not found with id: " + id);
-        }
+        Reservation reservation = reservationRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Reservation not found with id: " + id
+                ));
 
-        ReservationDTO reservationDTO = reservationMapper.toDTO(
-                reservationRepository.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Reservation not found"))
-        );
-
+        ReservationDTO reservationDTO = reservationMapper.toDTO(reservation);
         reservationRepository.deleteById(id);
-
         return reservationDTO;
     }
 
     @Override
     public ReservationDTO cancelReservation(Long id) {
         Reservation reservation = reservationRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Reservation not found with id: " + id
+                ));
 
         if (reservation.getStatus() != ReservationStatus.PENDING) {
-            throw new IllegalStateException("Only pending reservations can be cancelled");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending reservations can be cancelled");
         }
 
         reservation.setStatus(ReservationStatus.CANCELLED);
@@ -119,10 +139,13 @@ public class ReservationServiceImpl implements ReservationService {
     @Override
     public ReservationDTO fulfillReservation(Long id) {
         Reservation reservation = reservationRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Reservation not found with id: " + id
+                ));
 
         if (reservation.getStatus() != ReservationStatus.PENDING) {
-            throw new IllegalStateException("Only pending reservations can be fulfilled");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending reservations can be fulfilled");
         }
 
         reservation.setStatus(ReservationStatus.FULFILLED);
@@ -133,10 +156,13 @@ public class ReservationServiceImpl implements ReservationService {
     @Override
     public ReservationDTO expireReservation(Long id) {
         Reservation reservation = reservationRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Reservation not found with id: " + id
+                ));
 
         if (reservation.getStatus() != ReservationStatus.PENDING) {
-            throw new IllegalStateException("Only pending reservations can be expired");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending reservations can be expired");
         }
 
         reservation.setStatus(ReservationStatus.EXPIRED);

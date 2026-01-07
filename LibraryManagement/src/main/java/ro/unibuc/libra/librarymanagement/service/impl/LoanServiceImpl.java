@@ -1,7 +1,8 @@
 package ro.unibuc.libra.librarymanagement.service.impl;
 
-import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import ro.unibuc.libra.librarymanagement.dto.LoanDTO;
 import ro.unibuc.libra.librarymanagement.entity.Book;
 import ro.unibuc.libra.librarymanagement.entity.Loan;
@@ -36,14 +37,27 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public LoanDTO createLoan(LoanDTO loanDTO) {
+        if (loanDTO.getBook() == null || loanDTO.getBook().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Book id is required");
+        }
+        if (loanDTO.getMember() == null || loanDTO.getMember().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Member id is required");
+        }
+
         Book book = bookRepository.findById(loanDTO.getBook().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + loanDTO.getBook().getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Book not found with id: " + loanDTO.getBook().getId()
+                ));
 
         Member member = memberRepository.findById(loanDTO.getMember().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + loanDTO.getMember().getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Member not found with id: " + loanDTO.getMember().getId()
+                ));
 
         if (book.getAvailableCopies() <= 0) {
-            throw new IllegalStateException("Book is not available for loan");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Book is not available for loan");
         }
 
         Loan loan = new Loan();
@@ -71,14 +85,20 @@ public class LoanServiceImpl implements LoanService {
     public LoanDTO findLoanById(Long id) {
         return loanMapper.toDTO(
                 loanRepository.findByIdWithDetails(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + id))
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Loan not found with id: " + id
+                        ))
         );
     }
 
     @Override
     public LoanDTO updateLoan(Long id, LoanDTO loanDTO) {
         Loan existingLoan = loanRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Loan not found with id: " + id
+                ));
 
         existingLoan.setLoanDate(loanDTO.getLoanDate());
         existingLoan.setDueDate(loanDTO.getDueDate());
@@ -90,27 +110,27 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public LoanDTO deleteLoan(Long id) {
-        if (!loanRepository.existsById(id)) {
-            throw new EntityNotFoundException("Loan not found with id: " + id);
-        }
+        Loan loan = loanRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Loan not found with id: " + id
+                ));
 
-        LoanDTO loanDTO = loanMapper.toDTO(
-                loanRepository.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Loan not found"))
-        );
-
+        LoanDTO loanDTO = loanMapper.toDTO(loan);
         loanRepository.deleteById(id);
-
         return loanDTO;
     }
 
     @Override
     public LoanDTO returnLoan(Long id) {
         Loan loan = loanRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Loan not found with id: " + id
+                ));
 
         if (loan.getStatus() == LoanStatus.RETURNED) {
-            throw new IllegalStateException("Loan has already been returned");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Loan has already been returned");
         }
 
         loan.setReturnDate(ZonedDateTime.now());
@@ -126,10 +146,13 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanDTO renewLoan(Long id) {
         Loan loan = loanRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Loan not found with id: " + id
+                ));
 
         if (loan.getStatus() != LoanStatus.ACTIVE) {
-            throw new IllegalStateException("Only active loans can be renewed");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only active loans can be renewed");
         }
 
         loan.setDueDate(loan.getDueDate().plusDays(14));

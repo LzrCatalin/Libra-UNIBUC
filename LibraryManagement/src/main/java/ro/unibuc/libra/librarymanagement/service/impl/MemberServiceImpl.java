@@ -1,7 +1,8 @@
 package ro.unibuc.libra.librarymanagement.service.impl;
 
-import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import ro.unibuc.libra.librarymanagement.dto.FineDTO;
 import ro.unibuc.libra.librarymanagement.dto.LoanDTO;
 import ro.unibuc.libra.librarymanagement.dto.MemberDTO;
@@ -54,9 +55,11 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public MemberDTO findById(Long id) {
         return memberMapper.toDTO(
-                memberRepository.findById(id).orElseThrow(
-                        () -> new EntityNotFoundException("Member not found with id: " + id)
-                )
+                memberRepository.findById(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Member not found with id: " + id
+                        ))
         );
     }
 
@@ -71,14 +74,17 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public MemberDTO createMember(MemberDTO memberDTO) {
         return memberMapper.toDTO(
-                memberRepository.save(
-                        memberMapper.toEntity(memberDTO)));
+                memberRepository.save(memberMapper.toEntity(memberDTO))
+        );
     }
 
     @Override
     public MemberDTO updateMember(Long id, MemberDTO memberDTO) {
         Member existingMember = memberRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Member not found with id: " + id
+                ));
 
         existingMember.setFirstName(memberDTO.getFirstName());
         existingMember.setLastName(memberDTO.getLastName());
@@ -94,13 +100,14 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public MemberDTO deleteMember(Long id) {
-        if (!memberRepository.existsById(id))
-            throw new EntityNotFoundException("Member not found with id: " + id);
+        Member member = memberRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Member not found with id: " + id
+                ));
 
-        MemberDTO memberDTO = memberMapper.toDTO(memberRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Member not found with id: " + id)));
+        MemberDTO memberDTO = memberMapper.toDTO(member);
         memberRepository.deleteById(id);
-
         return memberDTO;
     }
 
@@ -138,8 +145,12 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public List<LoanDTO> getMemberLoans(Long memberId) {
-        if (!memberRepository.existsById(memberId))
-            throw new EntityNotFoundException("Member not found with id: " + memberId);
+        if (!memberRepository.existsById(memberId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Member not found with id: " + memberId
+            );
+        }
 
         return loanRepository.findByMemberId(memberId)
                 .stream()
@@ -149,8 +160,12 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public List<ReservationDTO> getMemberReservations(Long memberId) {
-        if (!memberRepository.existsById(memberId))
-            throw new EntityNotFoundException("Member not found with id: " + memberId);
+        if (!memberRepository.existsById(memberId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Member not found with id: " + memberId
+            );
+        }
 
         return reservationRepository.findByMemberId(memberId)
                 .stream()
@@ -160,8 +175,12 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public List<FineDTO> getMemberFines(Long memberId) {
-        if (!memberRepository.existsById(memberId))
-            throw new EntityNotFoundException("Member not found with id: " + memberId);
+        if (!memberRepository.existsById(memberId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Member not found with id: " + memberId
+            );
+        }
 
         return fineRepository.findByMemberId(memberId)
                 .stream()

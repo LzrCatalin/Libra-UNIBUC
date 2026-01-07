@@ -1,7 +1,8 @@
 package ro.unibuc.libra.librarymanagement.service.impl;
 
-import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import ro.unibuc.libra.librarymanagement.dto.AuthorDTO;
 import ro.unibuc.libra.librarymanagement.dto.BookDTO;
 import ro.unibuc.libra.librarymanagement.entity.Author;
@@ -34,7 +35,11 @@ public class AuthorServiceImpl implements AuthorService {
     @Override
     public AuthorDTO findById(Long id) {
         return authorMapper.toDTO(
-                authorRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id))
+                authorRepository.findById(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Author not found with id: " + id
+                        ))
         );
     }
 
@@ -49,14 +54,17 @@ public class AuthorServiceImpl implements AuthorService {
     @Override
     public AuthorDTO createAuthor(AuthorDTO authorDTO) {
         return authorMapper.toDTO(
-                authorRepository.save(
-                        authorMapper.toEntity(authorDTO)));
+                authorRepository.save(authorMapper.toEntity(authorDTO))
+        );
     }
 
     @Override
     public AuthorDTO updateAuthor(Long id, AuthorDTO authorDTO) {
         Author existingAuthor = authorRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Author not found with id: " + id
+                ));
 
         existingAuthor.setFirstName(authorDTO.getFirstName());
         existingAuthor.setLastName(authorDTO.getLastName());
@@ -69,13 +77,14 @@ public class AuthorServiceImpl implements AuthorService {
 
     @Override
     public AuthorDTO deleteAuthor(Long id) {
-        if (!authorRepository.existsById(id))
-            throw new EntityNotFoundException("Author not found with id: " + id);
+        Author author = authorRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Author not found with id: " + id
+                ));
 
-        AuthorDTO authorDTO = authorMapper.toDTO(authorRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + id)));
+        AuthorDTO authorDTO = authorMapper.toDTO(author);
         authorRepository.deleteById(id);
-
         return authorDTO;
     }
 
@@ -89,8 +98,12 @@ public class AuthorServiceImpl implements AuthorService {
 
     @Override
     public List<BookDTO> findBooksByAuthor(Long authorId) {
-        if (!authorRepository.existsById(authorId))
-            throw new EntityNotFoundException("Author not found with id: " + authorId);
+        if (!authorRepository.existsById(authorId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Author not found with id: " + authorId
+            );
+        }
 
         return bookRepository.findByAuthorId(authorId)
                 .stream()

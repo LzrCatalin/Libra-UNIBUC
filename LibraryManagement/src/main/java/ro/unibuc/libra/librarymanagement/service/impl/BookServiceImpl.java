@@ -1,7 +1,8 @@
 package ro.unibuc.libra.librarymanagement.service.impl;
 
-import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import ro.unibuc.libra.librarymanagement.dto.AuthorDTO;
 import ro.unibuc.libra.librarymanagement.dto.BookDTO;
 import ro.unibuc.libra.librarymanagement.entity.Author;
@@ -33,7 +34,11 @@ public class BookServiceImpl implements BookService {
     @Override
     public BookDTO findBookById(Long id) {
         return bookMapper.toDTO(
-                bookRepository.findByIdWithAuthors(id).orElseThrow(() -> new EntityNotFoundException("Not found"))
+                bookRepository.findByIdWithAuthors(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Book not found with id: " + id
+                        ))
         );
     }
 
@@ -65,7 +70,10 @@ public class BookServiceImpl implements BookService {
         List<Author> authors = validateAndFetchAuthors(bookDTO.getAuthors());
 
         Book existingBook = bookRepository.findByIdWithAuthors(id)
-                .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Book not found with id: " + id
+                ));
 
         existingBook.setTitle(bookDTO.getTitle());
         existingBook.setDescription(bookDTO.getDescription());
@@ -87,12 +95,14 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public BookDTO deleteBook(Long id) {
-        if (!bookRepository.existsById(id))
-            throw new EntityNotFoundException("Book not found with id: " + id);
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Book not found with id: " + id
+                ));
 
-        BookDTO bookDTO = bookMapper.toDTO(bookRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Not found")));
+        BookDTO bookDTO = bookMapper.toDTO(book);
         bookRepository.deleteById(id);
-
         return bookDTO;
     }
 
@@ -122,12 +132,18 @@ public class BookServiceImpl implements BookService {
 
     private List<Author> validateAndFetchAuthors(List<AuthorDTO> authorDTOs) {
         if (authorDTOs == null || authorDTOs.isEmpty()) {
-            throw new IllegalArgumentException("Book must have at least one author");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Book must have at least one author"
+            );
         }
 
         return authorDTOs.stream()
                 .map(authorDTO -> authorRepository.findById(authorDTO.getId())
-                        .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + authorDTO.getId())))
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Author not found with id: " + authorDTO.getId()
+                        )))
                 .toList();
     }
 }

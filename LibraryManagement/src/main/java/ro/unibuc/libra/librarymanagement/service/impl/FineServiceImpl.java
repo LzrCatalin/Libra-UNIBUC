@@ -1,7 +1,8 @@
 package ro.unibuc.libra.librarymanagement.service.impl;
 
-import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import ro.unibuc.libra.librarymanagement.dto.FineDTO;
 import ro.unibuc.libra.librarymanagement.entity.Fine;
 import ro.unibuc.libra.librarymanagement.entity.Loan;
@@ -37,11 +38,18 @@ public class FineServiceImpl implements FineService {
 
     @Override
     public FineDTO createFine(FineDTO fineDTO) {
+        if (fineDTO.getLoan() == null || fineDTO.getLoan().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Loan id is required");
+        }
+
         Loan loan = loanRepository.findByIdWithDetails(fineDTO.getLoan().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + fineDTO.getLoan().getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Loan not found with id: " + fineDTO.getLoan().getId()
+                ));
 
         if (fineRepository.existsByLoanId(loan.getId())) {
-            throw new IllegalStateException("Fine already exists for this loan");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Fine already exists for this loan");
         }
 
         Fine fine = new Fine();
@@ -67,14 +75,20 @@ public class FineServiceImpl implements FineService {
     public FineDTO findFineById(Long id) {
         return fineMapper.toDTO(
                 fineRepository.findByIdWithDetails(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Fine not found with id: " + id))
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Fine not found with id: " + id
+                        ))
         );
     }
 
     @Override
     public FineDTO updateFine(Long id, FineDTO fineDTO) {
         Fine existingFine = fineRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Fine not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Fine not found with id: " + id
+                ));
 
         existingFine.setAmount(fineDTO.getAmount());
         existingFine.setReason(fineDTO.getReason());
@@ -87,27 +101,27 @@ public class FineServiceImpl implements FineService {
 
     @Override
     public FineDTO deleteFine(Long id) {
-        if (!fineRepository.existsById(id)) {
-            throw new EntityNotFoundException("Fine not found with id: " + id);
-        }
+        Fine fine = fineRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Fine not found with id: " + id
+                ));
 
-        FineDTO fineDTO = fineMapper.toDTO(
-                fineRepository.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Fine not found"))
-        );
-
+        FineDTO fineDTO = fineMapper.toDTO(fine);
         fineRepository.deleteById(id);
-
         return fineDTO;
     }
 
     @Override
     public FineDTO payFine(Long id) {
         Fine fine = fineRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Fine not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Fine not found with id: " + id
+                ));
 
         if (fine.getStatus() != FineStatus.PENDING) {
-            throw new IllegalStateException("Only pending fines can be paid");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending fines can be paid");
         }
 
         fine.setPaidDate(ZonedDateTime.now());
@@ -119,10 +133,13 @@ public class FineServiceImpl implements FineService {
     @Override
     public FineDTO waiveFine(Long id) {
         Fine fine = fineRepository.findByIdWithDetails(id)
-                .orElseThrow(() -> new EntityNotFoundException("Fine not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Fine not found with id: " + id
+                ));
 
         if (fine.getStatus() != FineStatus.PENDING) {
-            throw new IllegalStateException("Only pending fines can be waived");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending fines can be waived");
         }
 
         fine.setStatus(FineStatus.WAIVED);
@@ -133,19 +150,22 @@ public class FineServiceImpl implements FineService {
     @Override
     public FineDTO generateFineForLoan(Long loanId) {
         Loan loan = loanRepository.findByIdWithDetails(loanId)
-                .orElseThrow(() -> new EntityNotFoundException("Loan not found with id: " + loanId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Loan not found with id: " + loanId
+                ));
 
         if (fineRepository.existsByLoanId(loanId)) {
-            throw new IllegalStateException("Fine already exists for this loan");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Fine already exists for this loan");
         }
 
         if (loan.getStatus() != LoanStatus.ACTIVE) {
-            throw new IllegalStateException("Only active loans can have fines generated");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only active loans can have fines generated");
         }
 
         ZonedDateTime now = ZonedDateTime.now();
         if (!loan.getDueDate().isBefore(now)) {
-            throw new IllegalStateException("Loan is not overdue yet");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Loan is not overdue yet");
         }
 
         long daysOverdue = ChronoUnit.DAYS.between(loan.getDueDate(), now);
@@ -167,9 +187,11 @@ public class FineServiceImpl implements FineService {
         List<Loan> overdueLoans = loanRepository.findOverdueLoans(ZonedDateTime.now(), LoanStatus.ACTIVE);
         List<FineDTO> generatedFines = new ArrayList<>();
 
+        ZonedDateTime now = ZonedDateTime.now();
+
         for (Loan loan : overdueLoans) {
             if (!fineRepository.existsByLoanId(loan.getId())) {
-                long daysOverdue = ChronoUnit.DAYS.between(loan.getDueDate(), ZonedDateTime.now());
+                long daysOverdue = ChronoUnit.DAYS.between(loan.getDueDate(), now);
                 BigDecimal fineAmount = DAILY_FINE_RATE.multiply(BigDecimal.valueOf(daysOverdue));
 
                 Fine fine = new Fine();
@@ -177,7 +199,7 @@ public class FineServiceImpl implements FineService {
                 fine.setMember(loan.getMember());
                 fine.setAmount(fineAmount);
                 fine.setReason("Overdue loan - " + daysOverdue + " days late");
-                fine.setIssuedDate(ZonedDateTime.now());
+                fine.setIssuedDate(now);
                 fine.setStatus(FineStatus.PENDING);
 
                 generatedFines.add(fineMapper.toDTO(fineRepository.save(fine)));
@@ -207,7 +229,10 @@ public class FineServiceImpl implements FineService {
     public FineDTO findByLoanId(Long loanId) {
         return fineRepository.findByLoanId(loanId)
                 .map(fineMapper::toDTO)
-                .orElseThrow(() -> new EntityNotFoundException("Fine not found for loan id: " + loanId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Fine not found for loan id: " + loanId
+                ));
     }
 
     @Override
