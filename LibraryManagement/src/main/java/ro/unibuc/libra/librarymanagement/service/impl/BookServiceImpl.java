@@ -2,9 +2,13 @@ package ro.unibuc.libra.librarymanagement.service.impl;
 
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
+import ro.unibuc.libra.librarymanagement.dto.AuthorDTO;
 import ro.unibuc.libra.librarymanagement.dto.BookDTO;
+import ro.unibuc.libra.librarymanagement.entity.Author;
 import ro.unibuc.libra.librarymanagement.entity.Book;
+import ro.unibuc.libra.librarymanagement.entity.BookAuthor;
 import ro.unibuc.libra.librarymanagement.mapper.BookMapper;
+import ro.unibuc.libra.librarymanagement.repository.AuthorRepository;
 import ro.unibuc.libra.librarymanagement.repository.BookRepository;
 import ro.unibuc.libra.librarymanagement.service.api.BookService;
 import ro.unibuc.libra.librarymanagement.util.enums.BookCategory;
@@ -16,11 +20,14 @@ public class BookServiceImpl implements BookService {
 
     private final BookMapper bookMapper;
     private final BookRepository bookRepository;
+    private final AuthorRepository authorRepository;
 
     public BookServiceImpl(BookMapper bookMapper,
-                           BookRepository bookRepository) {
+                           BookRepository bookRepository,
+                           AuthorRepository authorRepository) {
         this.bookMapper = bookMapper;
         this.bookRepository = bookRepository;
+        this.authorRepository = authorRepository;
     }
 
     @Override
@@ -32,9 +39,17 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public BookDTO createBook(BookDTO bookDTO) {
-        return bookMapper.toDTO(
-                bookRepository.save(
-                        bookMapper.toEntity(bookDTO)));
+        List<Author> authors = validateAndFetchAuthors(bookDTO.getAuthors());
+        Book book = bookMapper.toEntity(bookDTO);
+
+        for (Author author : authors) {
+            BookAuthor bookAuthor = new BookAuthor();
+            bookAuthor.setBook(book);
+            bookAuthor.setAuthor(author);
+            book.getBookAuthors().add(bookAuthor);
+        }
+
+        return bookMapper.toDTO(bookRepository.save(book));
     }
 
     @Override
@@ -47,6 +62,8 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public BookDTO updateBook(Long id, BookDTO bookDTO) {
+        List<Author> authors = validateAndFetchAuthors(bookDTO.getAuthors());
+
         Book existingBook = bookRepository.findByIdWithAuthors(id)
                 .orElseThrow(() -> new EntityNotFoundException("Book not found with id: " + id));
 
@@ -55,6 +72,15 @@ public class BookServiceImpl implements BookService {
         existingBook.setPublicationYear(bookDTO.getPublicationYear());
         existingBook.setAvailableCopies(bookDTO.getAvailableCopies());
         existingBook.setBookCategory(bookDTO.getBookCategory());
+
+        existingBook.getBookAuthors().clear();
+
+        for (Author author : authors) {
+            BookAuthor bookAuthor = new BookAuthor();
+            bookAuthor.setBook(existingBook);
+            bookAuthor.setAuthor(author);
+            existingBook.getBookAuthors().add(bookAuthor);
+        }
 
         return bookMapper.toDTO(bookRepository.save(existingBook));
     }
@@ -91,6 +117,17 @@ public class BookServiceImpl implements BookService {
         return bookRepository.findAvailableBooks()
                 .stream()
                 .map(bookMapper::toDTO)
+                .toList();
+    }
+
+    private List<Author> validateAndFetchAuthors(List<AuthorDTO> authorDTOs) {
+        if (authorDTOs == null || authorDTOs.isEmpty()) {
+            throw new IllegalArgumentException("Book must have at least one author");
+        }
+
+        return authorDTOs.stream()
+                .map(authorDTO -> authorRepository.findById(authorDTO.getId())
+                        .orElseThrow(() -> new EntityNotFoundException("Author not found with id: " + authorDTO.getId())))
                 .toList();
     }
 }
